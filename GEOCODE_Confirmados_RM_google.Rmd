@@ -1,0 +1,113 @@
+---
+title: "Geoanalisis Aplicado"
+subtitle: "Geodificacion de Informacion con GOOGLE y Generacion de Mapas en R"
+author: "José Luis Toro"
+date: "25 de junio de 2020"
+output:
+  html_document:
+    theme: paper
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+editor_options:
+  chunk_output_type: console
+---
+
+### Configuracion
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, comment = NA, warning = FALSE)
+setwd('D:/Trabajo R')
+getwd()
+```
+
+#### Instalar packages
+
+```{r}
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+# usage
+packages <- c("rgdal","sf", "raster", # manejo de datos espaciales
+              "ggmap", # Geocodificacion
+              "ggplot2", "viridis", # cartografias estaticas
+              "digest","leaflet","RColorBrewer", # cartografias dinamicas
+              "spatstat", "spdep", "gstat", # analisis estadistico espacial
+              "leaps", "plyr","dplyr", # manipulacion y organizacion de datos
+              "xlsx","googleway") #excel
+ipak(packages)
+```
+
+
+### Geocodificacion de Direcciones
+
+#### Lectura de archivo .csv mediante la funcion `read.csv()`
+
+Carga datos de tasaciones en Concepcion para introducir proceso de geocodificacion
+
+```{r}
+## Codificacion caracteres espanol 
+Sys.setlocale(category = "LC_ALL", locale = "Spanish_Chile.1252")
+
+## Leer Base archivo .csv, contiene datos de tasaciones
+##Eliminar direcciones 0 y NA
+baseRSH2 <- read.csv(file = "ConfirmadosSinGeo.csv", header=TRUE, sep=';',
+                 check.names = FALSE, encoding = "UTF-8")
+#names(baseRSH)[1]="Id"
+#row.names(baseRSH)=base$Id
+View(baseRSH2)
+
+## Visualizacion de tabla de datos
+head(baseRSH2)
+```
+
+
+#### Creacion de columna con Direccion Completa
+
+Para que el motor de geocodificacion de google reconozca las direcciones, se les debe dar el siguiente formato, en una sola variable de texto:
+"NUMERO CALLE, Comuna, Pais""
+
+Este formato es especifico para cada motor de geocodificacion y es clave para el exito del proceso
+
+```{r}
+baseRSH2$direccion_comp <- paste(baseRSH2$numero_residencia_GO, " ",
+                             baseRSH2$direccion_GO,", ",
+                             baseRSH2$comuna_residencia_GO,
+                             ", Chile",
+                             sep = "")
+baseRSH2$LAT<-NA
+baseRSH2$LON<-NA
+```
+
+
+#### Geodificacion mediante el uso del package [ggmap](https://cran.r-project.org/web/packages/ggmap/ggmap.pdf) utilizando la funcion `geocode()`. 
+
+#Funcion de geocodificacion provista por google, tiene un limite de 2000 geocodificaciones diarias
+
+
+## Ejemplo del uso de la funcion geocode 
+```{r}
+library(googleway)
+for ( i in 3688:4000)#nrow(baseRSH2)) --8188
+{  
+coord<-google_geocode(baseRSH2$direccion_comp[i],key="<<CLAVE GOOGLE>>",language = NULL, region = NULL, components = NULL, simplify = TRUE,
+               curl_proxy = NULL)
+baseRSH2$LAT[i]<-coord$results$geometry$location[1]
+baseRSH2$LON[i]<-coord$results$geometry$location[2]
+}
+
+#Colapsa el listado y transforma de lista a vector
+baseRSH2$LAT <- vapply(baseRSH2$LAT, paste, collapse = ", ", character(1L))
+baseRSH2$LON <- vapply(baseRSH2$LON, paste, collapse = ", ", character(1L))
+
+#install.packages("xlsx")
+#library(xlsx)
+#Exporta el resultado a excel
+write.csv(baseRSH2[1:4000,],"base_RM_CONFIRMADOS_GOOGLE_1_4000.csv")
+```
+
+
